@@ -11,23 +11,8 @@ export default function HomePage() {
   async function handleSubmit(formData: any) {
     setLoading(true);
     setError(null);
+    sessionStorage.setItem("pending_form", JSON.stringify(formData));
     router.push("/loading");
-
-    try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Generation failed");
-      sessionStorage.setItem(`itinerary_${data.id}`, JSON.stringify(data));
-      router.push(`/itinerary/${data.id}`);
-    } catch (err: any) {
-      setError(err.message);
-      setLoading(false);
-      router.push("/");
-    }
   }
 
   return (
