@@ -98,7 +98,7 @@ RULES:
 }
 
 export async function generateItinerary(params: any, geo: any, weatherText: string, venuesText: string) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
   const prompt = buildPrompt(params, geo, weatherText, venuesText);
 
   const result = await model.generateContent(prompt);
