@@ -11,84 +11,22 @@ function buildPrompt(params: any, geo: any, weatherText: string, venuesText: str
   const gemsLabel = hiddenGemsLabel(params.hidden_gems_slider ?? 50);
   const { currency, budget, group_size, pace } = params;
   const mustSee = (params.must_see || "").trim();
-  const daysList = days.map((d, i) => `  Day ${i + 1}: ${d}`).join("\n");
-  const mustSeeBlock = mustSee ? `\nMust-see / must-do requests: ${mustSee}` : "";
-  const paceRule =
-    pace === "Packed" ? "2-3 activities per time block"
-    : pace === "Balanced" ? "1-2 activities per time block"
-    : "1 activity per time block, leisurely";
+  const daysList = days.map((d, i) => `Day ${i + 1}: ${d}`).join(", ");
+  const paceRule = pace === "Packed" ? "2-3 activities/block" : pace === "Balanced" ? "1-2 activities/block" : "1 activity/block";
 
-  const system = `You are an expert travel planner with deep local knowledge of destinations worldwide.
-You create highly personalized, vivid, and practical day-by-day travel itineraries.
-Your recommendations are specific (real place names), geographically logical, and adapted to the traveler's exact preferences.
-You always respond with valid JSON only — no markdown code fences, no prose outside the JSON object.`;
+  const system = `You are an expert travel planner. Respond with valid JSON only — no markdown, no code fences, raw JSON object only.`;
 
-  const user = `Create a complete ${numDays}-day travel itinerary for the following trip.
+  const user = `Create a ${numDays}-day itinerary for: ${geo.city}, ${geo.country}
+Accommodation: ${params.address} (${geo.lat}, ${geo.lon})
+Dates: ${daysList}
+Budget: ${currency} ${budget} for ${group_size} people | Pace: ${pace} (${paceRule}) | Vibe: ${vibeStr} | Dietary: ${dietaryStr} | Style: ${gemsLabel}${mustSee ? ` | Must-see: ${mustSee}` : ""}
+Weather: ${weatherText}
+Nearby: ${venuesText}
 
-ACCOMMODATION:
-  Address: ${params.address}
-  City: ${geo.city}, ${geo.country}
-  Coordinates: ${geo.lat}, ${geo.lon}
+Return this exact JSON structure:
+{"destination_summary":"string","days":[{"date":"YYYY-MM-DD","day_number":1,"theme":"string","weather_note":"string","daily_budget":{"food":0,"activities":0,"transport":0,"total":0},"morning":{"time_range":"string","activities":[{"name":"string","type":"restaurant|attraction|activity","description":"string","why_youll_love_this":"string","approx_cost_per_person":0,"distance_from_accommodation":"string","travel_time_from_accommodation":"string","affiliate_category":"restaurant|attraction|null","signature_dish":"string|null","indoor_alternative":"string|null","lat":0,"lon":0}]},"afternoon":{"time_range":"string","activities":[]},"evening":{"time_range":"string","activities":[]},"spontaneous_hour":{"neighborhood":"string","suggestion":"string"},"iconic_food_moment":{"name":"string","dish":"string","why":"string"}}]}
 
-TRIP DETAILS:
-  Dates:
-${daysList}
-  Total budget: ${currency} ${budget} for ${group_size} ${group_size === 1 ? "person" : "people"}
-  Trip vibe: ${vibeStr}
-  Pace: ${pace}
-  Dietary restrictions: ${dietaryStr}
-  Discovery style: ${gemsLabel}${mustSeeBlock}
-
-WEATHER FORECAST:
-${weatherText}
-
-NEARBY VENUES:
-${venuesText}
-
-Return a single JSON object (no markdown, no code fences, raw JSON only):
-
-{
-  "destination_summary": "2-3 sentence evocative description",
-  "total_budget_estimate": { "amount": <number>, "currency": "${currency}", "breakdown": "brief breakdown" },
-  "days": [
-    {
-      "date": "YYYY-MM-DD",
-      "day_number": 1,
-      "theme": "evocative theme title",
-      "weather_note": "one sentence about weather",
-      "daily_budget": { "food": <number>, "activities": <number>, "transport": <number>, "total": <number> },
-      "morning": {
-        "time_range": "8:00 AM – 12:00 PM",
-        "activities": [{
-          "name": "Place name",
-          "type": "restaurant | attraction | neighborhood | activity",
-          "description": "2-3 sentence description",
-          "why_youll_love_this": "one reason tailored to trip vibe",
-          "approx_cost_per_person": <number>,
-          "distance_from_accommodation": "e.g. 1.2 km",
-          "travel_time_from_accommodation": "e.g. 15 min walk",
-          "affiliate_category": "restaurant | attraction | null",
-          "signature_dish": "dish name or null",
-          "indoor_alternative": "alternative if rainy or null",
-          "lat": <number or null>,
-          "lon": <number or null>
-        }]
-      },
-      "afternoon": { "time_range": "...", "activities": [{ <same structure> }] },
-      "evening": { "time_range": "...", "activities": [{ <same structure> }] },
-      "spontaneous_hour": { "neighborhood": "name", "suggestion": "1-2 sentences" },
-      "iconic_food_moment": { "name": "restaurant name", "dish": "signature dish", "why": "one sentence" }
-    }
-  ]
-}
-
-RULES:
-- Every activity must be a real named place
-- Cluster stops geographically
-- Pace '${pace}': ${paceRule}
-- Keep costs realistic for ${geo.city}
-- Each day must have exactly one spontaneous_hour and one iconic_food_moment
-- Include lat/lon for activities when you know them`;
+Rules: real place names only, cluster stops geographically, costs realistic for ${geo.city}, each day needs spontaneous_hour and iconic_food_moment, include lat/lon when known.`;
 
   return { system, user };
 }
@@ -97,13 +35,13 @@ export async function generateItinerary(params: any, geo: any, weatherText: stri
   const { system, user } = buildPrompt(params, geo, weatherText, venuesText);
 
   const completion = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+    model: "llama-3.1-8b-instant",
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
     ],
     temperature: 0.7,
-    max_tokens: 32768,
+    max_tokens: 8000,
   });
 
   let raw = completion.choices[0].message.content?.trim() || "";
