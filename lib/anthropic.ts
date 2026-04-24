@@ -1,7 +1,7 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 import { dateRange, hiddenGemsLabel } from "./helpers";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 function buildPrompt(params: any, geo: any, weatherText: string, venuesText: string) {
   const days = dateRange(params.start_date, params.end_date);
@@ -18,12 +18,12 @@ function buildPrompt(params: any, geo: any, weatherText: string, venuesText: str
     : pace === "Balanced" ? "1-2 activities per time block"
     : "1 activity per time block, leisurely";
 
-  return `You are an expert travel planner with deep local knowledge of destinations worldwide.
+  const system = `You are an expert travel planner with deep local knowledge of destinations worldwide.
 You create highly personalized, vivid, and practical day-by-day travel itineraries.
 Your recommendations are specific (real place names), geographically logical, and adapted to the traveler's exact preferences.
-You always respond with valid JSON only — no markdown, no prose outside the JSON.
+You always respond with valid JSON only — no markdown code fences, no prose outside the JSON object.`;
 
-Create a complete ${numDays}-day travel itinerary for the following trip.
+  const user = `Create a complete ${numDays}-day travel itinerary for the following trip.
 
 ACCOMMODATION:
   Address: ${params.address}
@@ -45,15 +45,11 @@ ${weatherText}
 NEARBY VENUES:
 ${venuesText}
 
-Return a single JSON object with this exact structure (no markdown, no code fences):
+Return a single JSON object (no markdown, no code fences, raw JSON only):
 
 {
   "destination_summary": "2-3 sentence evocative description",
-  "total_budget_estimate": {
-    "amount": <number>,
-    "currency": "${currency}",
-    "breakdown": "brief breakdown"
-  },
+  "total_budget_estimate": { "amount": <number>, "currency": "${currency}", "breakdown": "brief breakdown" },
   "days": [
     {
       "date": "YYYY-MM-DD",
@@ -63,25 +59,23 @@ Return a single JSON object with this exact structure (no markdown, no code fenc
       "daily_budget": { "food": <number>, "activities": <number>, "transport": <number>, "total": <number> },
       "morning": {
         "time_range": "8:00 AM – 12:00 PM",
-        "activities": [
-          {
-            "name": "Place name",
-            "type": "restaurant | attraction | neighborhood | activity",
-            "description": "2-3 sentence description",
-            "why_youll_love_this": "one reason tailored to trip vibe",
-            "approx_cost_per_person": <number>,
-            "distance_from_accommodation": "e.g. 1.2 km",
-            "travel_time_from_accommodation": "e.g. 15 min walk",
-            "affiliate_category": "restaurant | attraction | null",
-            "signature_dish": "dish name or null",
-            "indoor_alternative": "alternative if rainy or null",
-            "lat": <number or null>,
-            "lon": <number or null>
-          }
-        ]
+        "activities": [{
+          "name": "Place name",
+          "type": "restaurant | attraction | neighborhood | activity",
+          "description": "2-3 sentence description",
+          "why_youll_love_this": "one reason tailored to trip vibe",
+          "approx_cost_per_person": <number>,
+          "distance_from_accommodation": "e.g. 1.2 km",
+          "travel_time_from_accommodation": "e.g. 15 min walk",
+          "affiliate_category": "restaurant | attraction | null",
+          "signature_dish": "dish name or null",
+          "indoor_alternative": "alternative if rainy or null",
+          "lat": <number or null>,
+          "lon": <number or null>
+        }]
       },
-      "afternoon": { "time_range": "...", "activities": [ { <same structure> } ] },
-      "evening": { "time_range": "...", "activities": [ { <same structure> } ] },
+      "afternoon": { "time_range": "...", "activities": [{ <same structure> }] },
+      "evening": { "time_range": "...", "activities": [{ <same structure> }] },
       "spontaneous_hour": { "neighborhood": "name", "suggestion": "1-2 sentences" },
       "iconic_food_moment": { "name": "restaurant name", "dish": "signature dish", "why": "one sentence" }
     }
@@ -95,14 +89,24 @@ RULES:
 - Keep costs realistic for ${geo.city}
 - Each day must have exactly one spontaneous_hour and one iconic_food_moment
 - Include lat/lon for activities when you know them`;
+
+  return { system, user };
 }
 
 export async function generateItinerary(params: any, geo: any, weatherText: string, venuesText: string) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b" });
-  const prompt = buildPrompt(params, geo, weatherText, venuesText);
+  const { system, user } = buildPrompt(params, geo, weatherText, venuesText);
 
-  const result = await model.generateContent(prompt);
-  let raw = result.response.text().trim();
+  const completion = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    temperature: 0.7,
+    max_tokens: 8192,
+  });
+
+  let raw = completion.choices[0].message.content?.trim() || "";
 
   if (raw.startsWith("```")) {
     raw = raw.split("```")[1];
