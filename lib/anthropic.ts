@@ -103,7 +103,7 @@ export async function generateItinerary(params: any, geo: any, weatherText: stri
       { role: "user", content: user },
     ],
     temperature: 0.7,
-    max_tokens: 8192,
+    max_tokens: 32768,
   });
 
   let raw = completion.choices[0].message.content?.trim() || "";
